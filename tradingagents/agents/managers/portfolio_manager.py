@@ -1,16 +1,10 @@
-"""Portfolio Manager: synthesises the risk-analyst debate into the final decision.
-
-Uses LangChain's ``with_structured_output`` so the LLM produces a typed
-``PortfolioDecision`` directly, in a single call. Its rating is the run's
-``final_rating``, and the decision is rendered to markdown as
-``final_trade_decision`` for the memory log, CLI display and saved reports.
-When a provider does not expose structured output, the agent falls back to
-free-text generation and the rating is read from that text.
-"""
+"""Portfolio Manager: synthesises the risk-analyst debate into the final decision."""
 
 from __future__ import annotations
 
 from tradingagents.agents.context import (
+    STRICT_PRICE_AND_EVIDENCE_RULES,
+    build_evidence_coverage_summary,
     get_instrument_context_from_state,
     get_language_instruction,
     get_portfolio_context_from_state,
@@ -27,10 +21,13 @@ def create_portfolio_manager(llm):
         instrument_context = get_instrument_context_from_state(state)
         portfolio_context = get_portfolio_context_from_state(state)
 
-        history = state["risk_debate_state"]["history"]
         risk_debate_state = state["risk_debate_state"]
+        history = risk_debate_state["history"]
         research_plan = state["investment_plan"]
         trader_plan = state["trader_investment_plan"]
+
+        coverage_summary = build_evidence_coverage_summary(state)
+        coverage_block = f"\n{coverage_summary}\n" if coverage_summary else ""
 
         past_context = state.get("past_context", "")
         lessons_line = (
@@ -39,12 +36,12 @@ def create_portfolio_manager(llm):
             else ""
         )
 
-        prompt = f"""As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision.
+        prompt = f"""As the Portfolio Manager, synthesize the risk analysts' debate and deliver a 100% evidence-traceable final trading decision.
 
 {instrument_context}
 
 {portfolio_context}
-
+{coverage_block}
 ---
 
 **Rating Scale** (use exactly one):
@@ -63,20 +60,23 @@ def create_portfolio_manager(llm):
 
 ---
 
-Ground every conclusion in specific evidence from the analysts. The risk debate always contains conflicting stances; deciding which is stronger is the job, so conflict alone is not a reason to Hold. Commit to the stronger case, sized by how decisively it wins. Choose Hold only when the evidence is still balanced after that weighing, or too thin to support a call; do not force a direction to appear decisive. Weigh the analysts on their merits, independent of speaking order.
+Ground every conclusion in specific verified evidence from the analysts. The risk debate always contains conflicting stances; deciding which is stronger is the job, so conflict alone is not a reason to Hold. Commit to the stronger case, sized by how decisively it wins. Choose Hold only when the evidence is still balanced after that weighing, or too thin to support a call; do not force a direction to appear decisive. Weigh the analysts on their merits, independent of speaking order.
+
+{STRICT_PRICE_AND_EVIDENCE_RULES}
+- 100% Traceability: Every factual claim in your Executive Summary and Investment Thesis MUST trace back to a verified analyst report (Market, Sentiment, News, or Fundamentals); discard any unverified claim made during the debate.
+- Preserve Uncertainty: Whenever any analyst report returned `Insufficient Data` (`DATA_UNAVAILABLE`) or `Partial Data`, explicitly name those missing dimensions in both Executive Summary and Investment Thesis and explain how that uncertainty constrains conviction and position sizing.
+- No Arbitrary Price Target / Stop / Support: Leave `price_target` null (`not provided`) unless derived from an explicit, reproducible mathematical formula on verified report numbers shown step-by-step in Investment Thesis; otherwise declare explicitly that there is no validated price target or technical support/resistance level.
 
 ## Output
 
 Write these sections, in this order, starting with the rating on its own line:
 
 - **Rating**: exactly one of Buy / Overweight / Hold / Underweight / Sell
-- **Executive Summary**: the call and how to act on it
-- **Investment Thesis**: the evidence that decided it, and what would change it
+- **Executive Summary**: the call, how to act on it, verified risk parameters, and explicit data limitations
+- **Investment Thesis**: the verified evidence from each analyst report that decided it, preserved `Insufficient Data` uncertainties, explicit statement when no validated price target/technical level exists, and what verified catalyst would change the call
 
 {NO_EXTERNAL_TOOLS}{get_language_instruction()}"""
 
-        # The typed rating is the decision; the rendered text only carries it.
-        # Read back from text, a rating the thesis quotes could replace it.
         decision = invoke_structured(structured_llm, prompt, "Portfolio Manager")
         if decision is not None:
             final_trade_decision = render_pm_decision(decision)

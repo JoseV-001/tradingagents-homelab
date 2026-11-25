@@ -1,4 +1,5 @@
 from tradingagents.agents.context import (
+    STRICT_PRICE_AND_EVIDENCE_RULES,
     get_instrument_context_from_state,
     get_language_instruction,
     opponent_argument_or_opening,
@@ -28,18 +29,17 @@ def create_bear_researcher(llm):
             else "Asset fundamentals report (may be unavailable for crypto)"
         )
 
-        prompt = f"""You are a Bear Analyst making the case against investing in the {target_label}. Your goal is to present a well-reasoned argument emphasizing risks, challenges, and negative indicators. Leverage the provided research and data to highlight potential downsides and counter bullish arguments effectively.
+        prompt = f"""You are a Bear Analyst making the cautious/risk case on the {target_label}, strictly grounded in verified analyst evidence.
 
-Key points to focus on:
+{STRICT_PRICE_AND_EVIDENCE_RULES}
 
-- Risks and Challenges: Highlight factors like market saturation, financial instability, or macroeconomic threats that could hinder the stock's performance.
-- Competitive Weaknesses: Emphasize vulnerabilities such as weaker market positioning, declining innovation, or threats from competitors.
-- Negative Indicators: Use evidence from financial data, market trends, or recent adverse news to support your position.
-- Bull Counterpoints: Critically analyze the bull argument with specific data and sound reasoning, exposing weaknesses or over-optimistic assumptions.
-- Engagement: Present your argument in a conversational style, directly engaging with the bull analyst's points and debating effectively rather than simply listing facts.
+Key points to focus on (ONLY where supported by the reports below):
+- Verified Adverse or Limiting Signals: Highlight exact adverse or diverging indicators actually present in the reports (for example, close below SMA 50, negative MACD below zero, mixed trend classification, or verified fundamental headwinds when available).
+- Epistemic Risk from Missing Data: When fundamentals, news, or sentiment report `Insufficient Data` (`DATA_UNAVAILABLE`), highlight the risk of committing capital under blind spots â€” WITHOUT inventing macroeconomic crises, sector headwinds, competitive weaknesses, or financial numbers from training memory.
+- Bull Counterpoints: Critically challenge any over-optimistic interpretation by the bull analyst using strictly the verified figures in the reports.
+- Engagement: Present a clear, conversational critique grounded 100% in the reported evidence, explicitly stating when no validated technical support, resistance, stop-loss, or downside target exists.
 
 Resources available:
-
 {instrument_context}
 Market research report: {market_research_report}
 Social media sentiment report: {sentiment_report}
@@ -47,7 +47,7 @@ Latest world affairs news: {news_report}
 {fundamentals_label}: {fundamentals_report}
 Conversation history of the debate: {history}
 Last bull argument: {current_response}
-Use this information to deliver a compelling bear argument, refute the bull's claims, and engage in a dynamic debate that demonstrates the risks and weaknesses of investing in the {target_label}.
+Use ONLY this verified information to present the risk case without fabricating facts or price levels.
 """ + get_language_instruction()
 
         response = llm.invoke(prompt)

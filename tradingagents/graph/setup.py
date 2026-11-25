@@ -107,7 +107,8 @@ class GraphSetup:
         self.max_tool_rounds = max_tool_rounds
 
     def setup_graph(
-        self, selected_analysts=("market", "social", "news", "fundamentals"), memory_node=None
+        self, selected_analysts=("market", "social", "news", "fundamentals"),
+        memory_node=None, analyst_only=False
     ):
         """Set up and compile the agent workflow graph.
 
@@ -158,11 +159,16 @@ class GraphSetup:
         # every one of them has filed its report. The memory log settles past
         # decisions alongside them: only the Portfolio Manager reads its lessons.
         first_steps = [spec.agent_node for spec in plan.specs]
-        if memory_node is not None:
+        if memory_node is not None and not analyst_only:
             workflow.add_node("Memory Log", memory_node)
             first_steps.append("Memory Log")
         for node in first_steps:
             workflow.add_edge(START, node)
+
+        if analyst_only:
+            workflow.add_edge(first_steps, END)
+            return workflow
+
         workflow.add_edge(first_steps, "Bull Researcher")
 
         # Both research-debate edges share the complete DEBATE_PATH_MAP (#1088).

@@ -98,6 +98,7 @@ def _build_run_config(selections: dict, checkpoint: bool | None) -> dict:
 
 def run_analysis(checkpoint: bool | None = None, portfolio=None, flags=None):
     flags = flags or {}
+    analyst_only = bool(flags.get("analyst_only", False))
     # With no terminal nothing can answer a prompt: name every question still
     # open before any model is called, rather than stopping at the first one.
     if not (sys.stdin and sys.stdin.isatty()):
@@ -125,6 +126,7 @@ def run_analysis(checkpoint: bool | None = None, portfolio=None, flags=None):
         config=config,
         debug=True,
         callbacks=[stats_handler],
+        analyst_only=analyst_only,
     )
 
     message_buffer.init_for_analysis(selected_analyst_keys)
@@ -350,7 +352,10 @@ def run_analysis(checkpoint: bool | None = None, portfolio=None, flags=None):
             # Clean run: log the decision, then drop this run's checkpoint so a
             # later run starts fresh. A mid-stream failure skips both, keeping
             # the checkpoint for resume.
-            graph.record_decision(selections["ticker"], selections["analysis_date"], final_state)
+            if not analyst_only:
+                graph.record_decision(
+                    selections["ticker"], selections["analysis_date"], final_state
+                )
             graph.clear_checkpoint_on_success(
                 selections["ticker"], selections["analysis_date"], selections["asset_type"], portfolio
             )
@@ -377,7 +382,7 @@ def run_analysis(checkpoint: bool | None = None, portfolio=None, flags=None):
 
     # A decision nobody can read is not a position. Say so here rather than
     # leaving the run to look like a normal result.
-    if is_review(run_rating(final_state)):
+    if not analyst_only and is_review(run_rating(final_state)):
         console.print(
             "[yellow]No rating could be read from the final decision, so this run "
             "is recorded for review rather than as a position. Re-run, or read the "

@@ -57,6 +57,7 @@ class TradingAgentsGraph:
         debug=False,
         config: dict[str, Any] = None,
         callbacks: list | None = None,
+        analyst_only: bool = False,
     ):
         """Initialize the trading agents graph and components.
 
@@ -107,9 +108,14 @@ class TradingAgentsGraph:
 
         # Graph-shape-affecting run choices, kept for the checkpoint signature.
         self.selected_analysts = tuple(selected_analysts)
+        self.analyst_only = analyst_only
 
         # Set up the graph: keep the workflow for recompilation with a checkpointer.
-        self.workflow = self.graph_setup.setup_graph(selected_analysts, memory_node=self._memory_step)
+        self.workflow = self.graph_setup.setup_graph(
+            selected_analysts,
+            memory_node=None if analyst_only else self._memory_step,
+            analyst_only=analyst_only,
+        )
         self.graph = self.workflow.compile()
         self._checkpointer_ctx = None
         self._resuming = False
@@ -160,7 +166,8 @@ class TradingAgentsGraph:
             # another has pending nodes this graph no longer has, and one saved
             # before the Memory Log step would resume without the lessons.
             "analysts=parallel",
-            "memory=parallel",
+            f"analyst_only={self.analyst_only}",
+            f"memory={'off' if self.analyst_only else 'parallel'}",
             f"settings={digest}",
         ])
 

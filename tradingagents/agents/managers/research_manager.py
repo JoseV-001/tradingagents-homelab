@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from tradingagents.agents.context import get_instrument_context_from_state, get_language_instruction
+from tradingagents.agents.context import (
+    STRICT_PRICE_AND_EVIDENCE_RULES,
+    build_evidence_coverage_summary,
+    get_instrument_context_from_state,
+    get_language_instruction,
+)
 from tradingagents.agents.schemas import ResearchPlan, render_research_plan
 from tradingagents.agents.structured import (
     NO_EXTERNAL_TOOLS,
@@ -16,14 +21,15 @@ def create_research_manager(llm):
 
     def research_manager_node(state) -> dict:
         instrument_context = get_instrument_context_from_state(state)
-        history = state["investment_debate_state"].get("history", "")
-
         investment_debate_state = state["investment_debate_state"]
+        history = investment_debate_state.get("history", "")
+        coverage_summary = build_evidence_coverage_summary(state)
+        coverage_block = f"\n{coverage_summary}\n" if coverage_summary else ""
 
-        prompt = f"""As the Research Manager and debate facilitator, your role is to critically evaluate this round of debate and deliver a clear, actionable investment plan for the trader.
+        prompt = f"""As the Research Manager and debate facilitator, your role is to critically evaluate this round of debate and deliver a clear, evidence-traceable investment plan for the trader.
 
 {instrument_context}
-
+{coverage_block}
 ---
 
 **Rating Scale** (use exactly one):
@@ -35,6 +41,10 @@ def create_research_manager(llm):
 
 The debate always contains conflicting arguments; deciding which side is stronger is the job, so conflict alone is not a reason to Hold. Commit to the side with the stronger case, sized by how decisively it wins. Choose Hold only when the evidence is still balanced after that weighing, or too thin to support a call; do not manufacture a direction to appear decisive. Weigh the bull and bear cases on their merits, independent of which side spoke first or last.
 
+{STRICT_PRICE_AND_EVIDENCE_RULES}
+- Discard any bull or bear claim that is not grounded in verified analyst reports.
+- Preserve every `Insufficient Data` (`DATA_UNAVAILABLE`) limitation explicitly in both Rationale and Strategic Actions.
+
 ---
 
 **Debate History:**
@@ -45,8 +55,8 @@ The debate always contains conflicting arguments; deciding which side is stronge
 Write these sections, in this order, starting with the recommendation on its own line:
 
 - **Recommendation**: exactly one of Buy / Overweight / Hold / Underweight / Sell
-- **Rationale**: which arguments decided it
-- **Strategic Actions**: concrete steps for the trader, sized against a standard allocation
+- **Rationale**: which verified arguments decided it, and which dimensions reported Insufficient Data
+- **Strategic Actions**: concrete steps for the trader, sized against a standard allocation, without arbitrary price targets, supports, resistances, or stop-losses (declare explicitly if no validated technical price level exists)
 
 {NO_EXTERNAL_TOOLS}""" + get_language_instruction()
 

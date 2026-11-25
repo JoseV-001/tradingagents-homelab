@@ -216,3 +216,60 @@ def get_portfolio_context_from_state(state: Mapping[str, Any]) -> str:
         "holdings or cash, so do not assume a flat book; give direction and "
         "sizing guidance in terms the caller can apply to their own position."
     )
+
+
+STRICT_PRICE_AND_EVIDENCE_RULES = """
+STRICT ANTI-HALLUCINATION & PRICE-LEVEL RULES (MANDATORY):
+1. Evidence Boundary: Cite ONLY facts, numbers, dates, and classifications explicitly present in the analyst reports provided above. Never use general model training memory to invent company business details, holdings/subsidiaries, dividend history, valuation multiples, macroeconomic rates (Selic, IPCA, Fed Funds, CPI, GDP), or news events.
+2. Preserving Insufficient Data: Whenever an analyst report indicates `Insufficient Data`, `DATA_UNAVAILABLE`, `NO_DATA_AVAILABLE`, `Partial Data`, `withheld`, or `not available`, treat that dimension as an explicit epistemic uncertainty. Never treat missing data as neutral/positive/negative evidence, and never fill the gap from memory.
+3. Strict Price-Level Ban: NEVER invent or arbitrate price targets, support levels, resistance levels, entry triggers, or stop-loss prices outside the verified `market_report` snapshot. Moving averages (EMA 10, SMA 50, SMA 200) and Bollinger bands are NOT confirmed supports or resistances unless explicitly validated as such by the report. A price level may ONLY be cited if it is a verbatim figure from the verified snapshot or derived via an explicit arithmetic formula shown step-by-step from verified snapshot numbers (e.g., exact `Close` and `ATR`); otherwise, state explicitly that there is no validated technical level.
+""".strip()
+
+
+def _classify_single_report(text: str, kind: str) -> str:
+    raw = (text or "").strip()
+    if not raw:
+        return "Not Selected / Absent"
+    low = raw.lower()
+    if kind == "market":
+        if any(m in low for m in ("snapshot indisponível", "data_unavailable", "no_data_available")):
+            return "Insufficient Data (DATA_UNAVAILABLE)"
+        return "Available (Verified Market Snapshot)"
+    if "**insufficient data**" in low or "status: insufficient data" in low:
+        if "**partial data**" in low or "overall news status: partial data" in low or "overall fundamentals status: partial data" in low:
+            return "Partial Data (contains Insufficient Data / DATA_UNAVAILABLE gaps)"
+        return "Insufficient Data (DATA_UNAVAILABLE)"
+    if "**partial data**" in low:
+        return "Partial Data (contains DATA_UNAVAILABLE gaps)"
+    if "data_unavailable" in low or "no_data_available" in low:
+        return "Partial / Limited Data (contains DATA_UNAVAILABLE)"
+    return "Available"
+
+
+def build_evidence_coverage_summary(state: Mapping[str, Any]) -> str:
+    """Build deterministic Python audit of analyst report availability & uncertainty for downstream decision agents."""
+    keys = (
+        ("Market Analyst (Technical)", "market_report", "market"),
+        ("Sentiment Analyst (Social/News Sentiment)", "sentiment_report", "sentiment"),
+        ("News Analyst (Ticker/Global/Macro)", "news_report", "news"),
+        ("Fundamentals Analyst (Statements/Multiples)", "fundamentals_report", "fundamentals"),
+    )
+    if not any((state.get(k) or "").strip() for _, k, _ in keys):
+        return ""
+
+    statuses = [(label, _classify_single_report(state.get(k, ""), kind)) for label, k, kind in keys]
+    gaps = [label for label, st in statuses if "Insufficient Data" in st or "Partial" in st or "Absent" in st]
+
+    lines = [
+        "VERIFIED ANALYST EVIDENCE COVERAGE (PYTHON DETERMINISTIC AUDIT):",
+        *[f"- {label}: {st}" for label, st in statuses],
+    ]
+    if gaps:
+        lines.append(
+            "- UNCERTAINTY REQUIREMENT: Unverified / missing dimensions ("
+            + ", ".join(gaps)
+            + ") MUST be explicitly acknowledged as uncertainty in your reasoning and sizing. "
+            "Do NOT fabricate missing fundamentals, news, sentiment, or macro facts, and do NOT "
+            "invent arbitrary price targets, supports, resistances, or stop-loss levels."
+        )
+    return "\n".join(lines)

@@ -44,6 +44,59 @@ def _seven_days_back(trade_date: str) -> str:
     return (datetime.strptime(trade_date, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
 
 
+_NO_DATA_MARKERS = {
+    "news": (
+        "data_unavailable:",
+        "nenhuma notícia disponível",
+        "nenhuma noticia disponivel",
+        "no news available",
+        "no news found",
+        "no articles found",
+        "no relevant news",
+        "news unavailable",
+        "no results found",
+        "error retrieving news",
+        "failed to fetch news",
+    ),
+    "stocktwits": (
+        "stocktwits unavailable",
+        "<no stocktwits messages",
+        "no stocktwits messages",
+        "<none of the",
+    ),
+    "reddit": (
+        "reddit unavailable",
+        "<no reddit posts found",
+        "no reddit posts found",
+        "no reddit posts mentioning",
+        "fetch failed",
+        "coverage gap",
+    ),
+}
+
+
+def _has_substantive_data(block: str, source: str) -> bool:
+    """Identifica fontes vazias ou com falha, sem confundi-las com sentimento neutro."""
+    if source not in _NO_DATA_MARKERS:
+        raise ValueError(f"Fonte desconhecida: {source}")
+
+    text = str(block or "").strip().lower()
+
+    if not text:
+        return False
+
+    if any(marker in text for marker in _NO_DATA_MARKERS[source]):
+        return False
+
+    if text.startswith("<") and any(
+        marker in text[:300]
+        for marker in ("unavailable", "no posts", "no messages", "fetch failed")
+    ):
+        return False
+
+    return True
+
+
 def create_sentiment_analyst(llm):
     """Create a sentiment analyst node for the trading graph.
 
@@ -74,6 +127,38 @@ def create_sentiment_analyst(llm):
         reddit_block = fetch_reddit_posts(
             ticker, subreddits, start_date=start_date, end_date=end_date, screen=screen
         )
+
+        source_status = {
+            "Yahoo Finance": _has_substantive_data(news_block, "news"),
+            "StockTwits": _has_substantive_data(stocktwits_block, "stocktwits"),
+            "Reddit": _has_substantive_data(reddit_block, "reddit"),
+        }
+
+        # Sem evidências nas três fontes, não solicitar uma nota ao Gemini.
+        if not any(source_status.values()):
+            source_lines = [
+                f"- {name}: {'conteúdo recebido' if available else 'sem evidências utilizáveis'}"
+                for name, available in source_status.items()
+            ]
+
+            report_text = "\n".join([
+                "**Overall Sentiment:** **Insufficient Data** (Score: N/A)",
+                "**Confidence:** Low",
+                "",
+                "Não foi possível calcular o sentimento porque nenhuma das "
+                "fontes consultadas retornou evidências utilizáveis no período.",
+                "",
+                "**Status das fontes:**",
+                *source_lines,
+                "",
+                "Ausência de dados não significa sentimento neutro, bullish "
+                "ou bearish. Nenhuma classificação direcional foi atribuída.",
+            ])
+
+            return {
+                "messages": [AIMessage(content=report_text)],
+                "sentiment_report": report_text,
+            }
 
         system_message = _build_system_message(
             ticker=ticker,
@@ -187,12 +272,22 @@ Community discussion, without vote or comment counts. Subreddit character matter
 
 8. **Past sentiment is not predictive.** Frame your conclusions as signal for the trader to weigh alongside fundamentals and technicals, not as a price call.
 
+## Evidence quality and missing data
+
+- Falhas de consulta e fontes vazias não constituem evidência de sentimento.
+- Nunca classifique uma fonte indisponível como Neutral.
+- Analise somente notícias e publicações realmente presentes nos blocos.
+- Não invente publicações, contagens, proporções, eventos ou narrativas.
+- Identifique as fontes indisponíveis e reduza a confiança quando necessário.
+- Neutral exige evidências reais sem direção predominante.
+- Insufficient Data significa que não há evidências utilizáveis suficientes.
+
 ## Output fields
 
 Fill the following fields:
 
-- **overall_band**: Exactly one of Bullish / Mildly Bullish / Neutral / Mixed / Mildly Bearish / Bearish. Use Mixed when sources point in clearly different directions; Neutral only when all sources are genuinely silent.
-- **overall_score**: A number from 0 (maximally bearish) to 10 (maximally bullish); 5 is neutral. Keep it consistent with overall_band.
+- **overall_band**: Exactly one of Bullish / Mildly Bullish / Neutral / Mixed / Mildly Bearish / Bearish / Insufficient Data. Neutral requires substantive non-directional evidence. Insufficient Data means there is not enough usable evidence.
+- **overall_score**: A number from 0 to 10, or null when overall_band is Insufficient Data. Never assign 5 merely because sources failed or returned no evidence.
 - **confidence**: low / medium / high, based on data quality and sample size.
 - **narrative**: Full source-by-source breakdown, divergences, dominant narrative themes, catalysts and risks, and a markdown summary table of key sentiment signals (direction, source, supporting evidence).
 

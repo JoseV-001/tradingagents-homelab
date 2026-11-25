@@ -70,6 +70,9 @@ class AnalyzeRequest(BaseModel):
 def _resolved_runtime_config() -> dict[str, Any]:
     cfg = build_default_config()
     cfg.setdefault("output_language", "Portuguese")
+    tool_vendors = dict(cfg.get("tool_vendors") or {})
+    tool_vendors.setdefault("get_fundamentals", "brapi,yfinance")
+    cfg["tool_vendors"] = tool_vendors
     return cfg
 
 

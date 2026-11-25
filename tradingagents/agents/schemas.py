@@ -23,35 +23,17 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-# LLMs sometimes write a placeholder string ("None", "N/A", ...) into an optional
-# numeric field instead of omitting it. Coerce those to None so the structured
-# call validates instead of erroring (#1058). Pydantic still parses real numeric
-# strings ("189.5") to float.
 _NULLISH_FLOAT = {"", "none", "n/a", "na", "null", "nil", "-", "tbd", "unknown"}
 
 
 def _coerce_optional_float(value):
-    """Normalise an LLM-written optional numeric field before validation.
-
-    Three shapes show up in practice: a placeholder string ("None", "N/A") in
-    place of an omitted value (#1058); a percentage where a price was asked for
-    ("15%", #1288); and a human-formatted price ("$1,234.50"). A percentage
-    cannot be salvaged into an absolute level -- reading "15%" as 15 would put a
-    stop at $15 on a $600 stock -- so it is dropped like a placeholder, leaving
-    one bad field to null out instead of failing the whole proposal. A formatted
-    price is reduced to its number.
-
-    Anything that is not a single number is dropped the same way. A range
-    ("150-160") or a hedge ("around 150") would otherwise reach pydantic, fail
-    validation, and discard the whole decision, losing every field the model got
-    right along with the price.
-    """
+    """Normalise an LLM-written optional numeric field before validation."""
     if not isinstance(value, str):
         return value
     text = value.strip()
     if text.lower() in _NULLISH_FLOAT or text.endswith("%"):
         return None
-    cleaned = text.replace(",", "").lstrip("$€£¥").strip()
+    cleaned = text.replace(",", "").lstrip("$â‚¬Â£Â¥").strip()
     try:
         return float(cleaned)
     except ValueError:
@@ -74,13 +56,7 @@ class PortfolioRating(StrEnum):
 
 
 class TraderAction(StrEnum):
-    """3-tier transaction direction used by the Trader.
-
-    The Trader's job is to translate the Research Manager's investment plan
-    into a concrete transaction proposal: should the desk execute a Buy, a
-    Sell, or sit on Hold this round.  Position sizing and the nuanced
-    Overweight / Underweight calls happen later at the Portfolio Manager.
-    """
+    """3-tier transaction direction used by the Trader."""
 
     BUY = "Buy"
     HOLD = "Hold"
@@ -93,13 +69,7 @@ class TraderAction(StrEnum):
 
 
 class ResearchPlan(BaseModel):
-    """Structured investment plan produced by the Research Manager.
-
-    Hand-off to the Trader: the recommendation pins the directional view,
-    the rationale captures which side of the bull/bear debate carried the
-    argument, and the strategic actions translate that into concrete
-    instructions the trader can execute against.
-    """
+    """Structured investment plan produced by the Research Manager."""
 
     recommendation: PortfolioRating = Field(
         description=(
@@ -107,14 +77,19 @@ class ResearchPlan(BaseModel):
             "Hold / Underweight / Sell. Conflicting arguments alone are not a "
             "reason to Hold: commit to the stronger side, sized by how "
             "decisively it wins. Choose Hold only when the evidence is still "
-            "balanced after weighing, or too thin to support a call."
+            "balanced after weighing, or too thin to support a call (such as "
+            "when key analysts report Insufficient Data and remaining verified "
+            "signals are mixed or non-directional)."
         ),
     )
     rationale: str = Field(
         description=(
-            "Conversational summary of the key points from both sides of the "
-            "debate, ending with which arguments led to the recommendation. "
-            "Speak naturally, as if to a teammate."
+            "Summary of the verified evidence from both sides of the debate, "
+            "ending with which verified facts led to the recommendation. "
+            "Explicitly state any analyst dimensions that reported Insufficient "
+            "Data (DATA_UNAVAILABLE), discard any debater claim not backed by "
+            "verified reports, and NEVER invent price targets, supports, "
+            "resistances, or stop-losses."
         ),
     )
     strategic_actions: str = Field(
@@ -122,7 +97,11 @@ class ResearchPlan(BaseModel):
             "Concrete steps for the trader to implement the recommendation, "
             "including sizing guidance relative to a standard allocation. The "
             "research team does not see the caller's holdings; the trader and "
-            "portfolio manager apply the actual position."
+            "portfolio manager apply the actual position. Never invent arbitrary "
+            "price targets, supports, resistances, or stop-losses; cite price "
+            "levels only if derived via an explicit arithmetic formula from "
+            "verified market-snapshot figures, otherwise state explicitly that "
+            "there is no validated technical price level."
         ),
     )
 
@@ -144,42 +123,48 @@ def render_research_plan(plan: ResearchPlan) -> str:
 
 
 class TraderProposal(BaseModel):
-    """Structured transaction proposal produced by the Trader.
-
-    The trader reads the Research Manager's investment plan and the analyst
-    reports, then turns them into a concrete transaction: what action to
-    take, the reasoning that justifies it, and the practical levels for
-    entry, stop-loss, and sizing.
-    """
+    """Structured transaction proposal produced by the Trader."""
 
     action: TraderAction = Field(
         description="The transaction direction. Exactly one of Buy / Hold / Sell.",
     )
     reasoning: str = Field(
         description=(
-            "The case for this action, anchored in the analysts' reports and "
-            "the research plan. Two to four sentences."
+            "The case for this action, anchored strictly in verified analyst "
+            "reports and the research plan (two to five sentences). Preserve "
+            "any Insufficient Data (DATA_UNAVAILABLE) uncertainties explicitly. "
+            "If entry_price or stop_loss is provided, show the exact arithmetic "
+            "formula from verified snapshot figures (e.g. Close and ATR); "
+            "otherwise state explicitly that there is no validated technical "
+            "entry, support, resistance, or stop-loss level."
         ),
     )
     entry_price: float | None = Field(
         default=None,
         description=(
-            "Optional entry price target as an absolute number in the instrument's "
-            "quote currency (e.g. 189.5), never a percentage or a range. Omit it "
-            "if you cannot state a specific level."
+            "Optional entry price as an absolute number in the instrument's "
+            "quote currency (e.g. 189.5), never a percentage or a range. "
+            "MUST be null (omitted) when action is Hold or when no explicit, "
+            "verifiable level from the verified market snapshot applies. "
+            "NEVER invent or arbitrate unverified support/resistance entry prices."
         ),
     )
     stop_loss: float | None = Field(
         default=None,
         description=(
             "Optional stop-loss as an absolute price in the instrument's quote "
-            "currency (e.g. 172.0), never a percentage. Convert a percentage "
-            "distance to the price level it implies, or omit it."
+            "currency (e.g. 172.0), never a percentage. MUST be null (omitted) "
+            "when action is Hold or unless derived from an explicit arithmetic "
+            "calculation on verified snapshot figures (such as Close +/- k*ATR, "
+            "shown step-by-step in reasoning). NEVER invent arbitrary stop-losses."
         ),
     )
     position_sizing: str | None = Field(
         default=None,
-        description="Optional sizing guidance, e.g. '5% of portfolio'.",
+        description=(
+            "Optional sizing guidance, e.g. '0% new exposure (maintain current)' "
+            "or '2-3% of portfolio (reduced due to Insufficient Data)'."
+        ),
     )
 
     @field_validator("entry_price", "stop_loss", mode="before")
@@ -189,19 +174,12 @@ class TraderProposal(BaseModel):
 
 
 def render_trader_proposal(proposal: TraderProposal) -> str:
-    """Render a TraderProposal to markdown.
-
-    The trailing ``FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**`` line is
-    preserved for backward compatibility with the analyst stop-signal text
-    and any external code that greps for it.
-    """
+    """Render a TraderProposal to markdown."""
     parts = [
         f"**Action**: {proposal.action.value}",
         "",
         f"**Reasoning**: {proposal.reasoning}",
     ]
-    # Named even when absent, so a reader can tell a level the trader chose not
-    # to give from one the schema never asked for.
     for label, value in (("Entry Price", proposal.entry_price),
                          ("Stop Loss", proposal.stop_loss),
                          ("Position Sizing", proposal.position_sizing)):
@@ -219,13 +197,7 @@ def render_trader_proposal(proposal: TraderProposal) -> str:
 
 
 class PortfolioDecision(BaseModel):
-    """Structured output produced by the Portfolio Manager.
-
-    The model fills every field as part of its primary LLM call; no separate
-    extraction pass is required. Field descriptions double as the model's
-    output instructions, so the prompt body only needs to convey context and
-    the rating-scale guidance.
-    """
+    """Structured output produced by the Portfolio Manager."""
 
     rating: PortfolioRating = Field(
         description=(
@@ -239,24 +211,39 @@ class PortfolioDecision(BaseModel):
     )
     executive_summary: str = Field(
         description=(
-            "A concise action plan covering entry strategy, position sizing, "
-            "key risk levels, and time horizon. Two to four sentences."
+            "A concise, 100% evidence-traceable action plan covering direction, "
+            "position sizing, verified risk parameters, and data limitations "
+            "(two to four sentences). Explicitly preserve uncertainties where "
+            "analysts reported Insufficient Data (DATA_UNAVAILABLE), and state "
+            "explicitly when no validated technical support, resistance, stop, "
+            "or price target exists."
         ),
     )
     investment_thesis: str = Field(
         description=(
-            "Detailed reasoning anchored in specific evidence from the analysts' "
-            "debate. If prior lessons are referenced in the prompt context, "
-            "incorporate them; otherwise rely solely on the current analysis."
+            "Detailed reasoning 100% traceable to specific verified evidence "
+            "from each analyst report (Market, Sentiment, News, Fundamentals). "
+            "Explicitly list every analyst report that returned Insufficient "
+            "Data (DATA_UNAVAILABLE) and explain how that uncertainty constrains "
+            "conviction and sizing. Never invent company facts, macro data, "
+            "supports, resistances, stop-losses, or price targets. If prior "
+            "lessons are referenced in the prompt context, incorporate them; "
+            "otherwise rely solely on the current verified analysis."
         ),
     )
     price_target: float | None = Field(
         default=None,
-        description="Optional target price in the instrument's quote currency.",
+        description=(
+            "Optional target price in the instrument's quote currency. MUST be "
+            "null (omitted) unless derived via an explicit, reproducible "
+            "mathematical formula from verified report data shown step-by-step "
+            "in investment_thesis. NEVER invent, guess, or arbitrate a price "
+            "target from unverified multiples, moving averages, or Bollinger bands."
+        ),
     )
     time_horizon: str | None = Field(
         default=None,
-        description="Optional recommended holding period, e.g. '3-6 months'.",
+        description="Optional recommended holding or review period, e.g. 'Reavaliar apÃ³s divulgaÃ§Ã£o de dados verificÃ¡veis'.",
     )
 
     @field_validator("price_target", mode="before")
@@ -266,13 +253,7 @@ class PortfolioDecision(BaseModel):
 
 
 def render_pm_decision(decision: PortfolioDecision) -> str:
-    """Render a PortfolioDecision back to the markdown shape the rest of the system expects.
-
-    Memory log, CLI display, and saved report files all read this markdown,
-    so the rendered output preserves the exact section headers (``**Rating**``,
-    ``**Executive Summary**``, ``**Investment Thesis**``) that downstream
-    parsers and the report writers already handle.
-    """
+    """Render a PortfolioDecision back to the markdown shape the rest of the system expects."""
     parts = [
         f"**Rating**: {decision.rating.value}",
         "",
@@ -280,8 +261,6 @@ def render_pm_decision(decision: PortfolioDecision) -> str:
         "",
         f"**Investment Thesis**: {decision.investment_thesis}",
     ]
-    # Named even when absent: a missing line reads as a field nobody asked for,
-    # so a reader cannot tell "no target" from "target not reported".
     target = decision.price_target if decision.price_target is not None else "not provided"
     parts.extend(["", f"**Price Target**: {target}"])
     parts.extend(["", f"**Time Horizon**: {decision.time_horizon or 'not provided'}"])
@@ -294,11 +273,7 @@ def render_pm_decision(decision: PortfolioDecision) -> str:
 
 
 class SentimentBand(StrEnum):
-    """Discrete sentiment direction produced by the Sentiment Analyst.
-
-    Six tiers keep the signal granular enough to be actionable while remaining
-    small enough for every provider to map reliably from its JSON output.
-    """
+    """Discrete sentiment direction produced by the Sentiment Analyst."""
 
     BULLISH = "Bullish"
     MILDLY_BULLISH = "Mildly Bullish"
@@ -306,37 +281,29 @@ class SentimentBand(StrEnum):
     MIXED = "Mixed"
     MILDLY_BEARISH = "Mildly Bearish"
     BEARISH = "Bearish"
+    INSUFFICIENT_DATA = "Insufficient Data"
 
 
 class SentimentReport(BaseModel):
-    """Structured sentiment report produced by the Sentiment Analyst.
-
-    Replaces the previous free-form prose output so downstream consumers
-    (dashboards, audit logs, PDF renderers, other agents) can read
-    ``overall_band`` and ``overall_score`` without maintaining fragile regex
-    fallbacks that drift with every model release. ``narrative`` preserves the
-    rich source-by-source analysis; ``render_sentiment_report`` prepends a
-    deterministic header so the saved report stays human-readable.
-    """
+    """Structured sentiment report produced by the Sentiment Analyst."""
 
     overall_band: SentimentBand = Field(
         description=(
             "Overall sentiment direction. Exactly one of: "
-            "Bullish / Mildly Bullish / Neutral / Mixed / Mildly Bearish / Bearish. "
+            "Bullish / Mildly Bullish / Neutral / Mixed / Mildly Bearish / Bearish / Insufficient Data. "
             "Use Mixed when sources point in clearly different directions. "
             "Use Neutral only when all sources are genuinely silent or non-committal."
         ),
     )
-    overall_score: float = Field(
+    overall_score: float | None = Field(
+        default=None,
         ge=0.0,
         le=10.0,
         description=(
-            "Numeric sentiment intensity on a 0–10 scale. "
-            "0 = maximally bearish, 5 = neutral, 10 = maximally bullish. "
-            "Guideline for consistency with overall_band: "
-            "Bullish ~6.5–10, Mildly Bullish ~5.5–6.4, Neutral/Mixed ~4.5–5.5, "
-            "Mildly Bearish ~3.5–4.4, Bearish ~0–3.4. "
-            "Only the 0–10 bounds are enforced."
+            "Numeric sentiment intensity from 0 to 10. "
+            "Use null when there is insufficient source evidence to calculate "
+            "a meaningful sentiment score. Never use 5 merely because data "
+            "is unavailable."
         ),
     )
     confidence: Literal["low", "medium", "high"] = Field(
@@ -364,16 +331,42 @@ class SentimentReport(BaseModel):
 
 
 def render_sentiment_report(report: SentimentReport) -> str:
-    """Render a SentimentReport to the markdown shape the rest of the system expects.
-
-    The structured header (band + score + confidence) is prepended to the
-    narrative so the saved report is both human-readable and machine-parseable
-    without regex.
-    """
+    """Render a structured sentiment report with explicit missing-score support."""
+    score = (
+        f"{report.overall_score:.1f}/10"
+        if report.overall_score is not None
+        else "N/A"
+    )
     return "\n".join([
         f"**Overall Sentiment:** **{report.overall_band.value}** "
-        f"(Score: {report.overall_score:.1f}/10)",
+        f"(Score: {score})",
         f"**Confidence:** {report.confidence.capitalize()}",
         "",
         report.narrative,
     ])
+
+
+# ---------------------------------------------------------------------------
+# News Analyst
+# ---------------------------------------------------------------------------
+
+
+class NewsCoverageBand(StrEnum):
+    """Deterministic evidence-availability band for the News Analyst."""
+
+    SUFFICIENT_DATA = "Sufficient Data"
+    PARTIAL_DATA = "Partial Data"
+    INSUFFICIENT_DATA = "Insufficient Data"
+
+
+# ---------------------------------------------------------------------------
+# Fundamentals Analyst
+# ---------------------------------------------------------------------------
+
+
+class FundamentalsCoverageBand(StrEnum):
+    """Deterministic evidence-availability band for the Fundamentals Analyst."""
+
+    SUFFICIENT_DATA = "Sufficient Data"
+    PARTIAL_DATA = "Partial Data"
+    INSUFFICIENT_DATA = "Insufficient Data"
