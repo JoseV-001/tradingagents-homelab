@@ -1,0 +1,10 @@
+FROM ubuntu:26.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    ca-certificates \
+    libsqlite3-0 \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /home/leaphaz/apps/TradingAgents
+EXPOSE 8000
+CMD ["/home/leaphaz/apps/TradingAgents/.venv/bin/uvicorn", "api_server:app", "--host", "0.0.0.0", "--port", "8000"]

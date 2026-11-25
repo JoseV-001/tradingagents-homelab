@@ -1,36 +1,21 @@
 services:
-  tradingagents:
-    build: .
+  tradingagents-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: tradingagents-api
+    restart: unless-stopped
     env_file:
       - .env
+    ports:
+      - "8000:8000"
     volumes:
-      - ${TRADINGAGENTS_DATA_DIR:-tradingagents_data}:/home/appuser/.tradingagents
-    tty: true
-    stdin_open: true
+      - /home/leaphaz/apps/TradingAgents:/home/leaphaz/apps/TradingAgents
+    networks:
+      - invest-net
+    mem_limit: 512m
 
-  ollama:
-    image: ollama/ollama:latest
-    volumes:
-      - ollama_data:/root/.ollama
-    profiles:
-      - ollama
-
-  tradingagents-ollama:
-    build: .
-    env_file:
-      - .env
-    environment:
-      - TRADINGAGENTS_LLM_PROVIDER=ollama
-      - OLLAMA_BASE_URL=http://ollama:11434/v1
-    volumes:
-      - ${TRADINGAGENTS_DATA_DIR:-tradingagents_data}:/home/appuser/.tradingagents
-    depends_on:
-      - ollama
-    tty: true
-    stdin_open: true
-    profiles:
-      - ollama
-
-volumes:
-  tradingagents_data:
-  ollama_data:
+networks:
+  invest-net:
+    external: true
+    name: invest-portfolio_invest-net
