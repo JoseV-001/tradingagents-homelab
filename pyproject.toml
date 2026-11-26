@@ -50,6 +50,9 @@ tradingagents = "cli.main:app"
 [tool.setuptools.dynamic]
 version = {attr = "tradingagents.__version__"}
 
+[tool.setuptools]
+py-modules = ["api_server"]
+
 [tool.setuptools.packages.find]
 include = ["tradingagents*", "cli*"]
 
