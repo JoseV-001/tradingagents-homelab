@@ -1,4 +1,4 @@
-# 🤖 TradingAgents — Self-Hosted Multi-Asset & Multi-Market AI Financial Engine
+# TradingAgents — Self-Hosted Multi-Asset & Multi-Market AI Financial Engine
 
 > **Upstream Attribution & Credit:**
 > This repository is a customized, self-hosted engineering fork built upon the original open-source [**TradingAgents**](https://github.com/TauricResearch/TradingAgents) framework created by **Tauric Research** (*Yijia Xiao, Edward Sun, Di Luo, and Wei Wang* — [arXiv:2412.20138](https://arxiv.org/abs/2412.20138)).
@@ -12,7 +12,7 @@
 
 ---
 
-## 🌍 Overview
+## Overview
 
 While the upstream **TradingAgents** project focuses primarily on US equity simulations via CLI, **`tradingagents-homelab`** extends the framework into a **production-ready, deterministic, multi-asset and multi-market financial analysis microservice** designed to operate as the AI brain for the [**Invest Portfolio**](https://github.com/JoseV-001/invest-portfolio) wealth consolidation platform.
 
@@ -20,7 +20,7 @@ It natively analyzes **Global Equities, Brazilian B3 Assets (`.SA`), Real Estate
 
 ---
 
-## 🌐 Multi-Asset & Multi-Market Coverage
+## Multi-Asset & Multi-Market Coverage
 
 The dataflow router (`tradingagents/dataflows/router.py`) and symbol resolution engine (`tradingagents/dataflows/symbols.py`) automatically classify and route instruments across global exchanges and asset classes:
 
@@ -36,7 +36,7 @@ The dataflow router (`tradingagents/dataflows/router.py`) and symbol resolution 
 
 ---
 
-## 🧠 Multi-Agent LangGraph Architecture
+## Multi-Agent LangGraph Architecture
 
 Every ticker analysis request executes a structured **multi-stage adversarial workflow** where specialized analysts gather empirical tool evidence before researchers, traders, and risk officers debate the investment thesis:
 
@@ -45,28 +45,28 @@ flowchart LR
     Input["Ticker + Trade Date\n(e.g. PETR4.SA, NVDA, BTC-USD)"]
 
     subgraph Analysts["1. Parallel Analyst Team (Tool-Grounded)"]
-        Market["📈 Market / Technical Analyst\nOHLCV, SMA/EMA, RSI, MACD,\nBollinger, ATR, VWMA & Relative Alpha"]
-        Fund["🏛️ Fundamentals Analyst\nBrapi (B3 .SA) / SEC EDGAR (US) /\nYahoo Finance / Crypto Tokenomics"]
-        News["📰 News & Macro Analyst\nCompany & World News, FRED Macro\n(CPI, Fed Funds, Yield Curve), Polymarket"]
-        Social["💬 Social & Sentiment Analyst\nStockTwits Cashtags, Reddit Subreddits,\nInsider Sentiment & Transactions"]
+        Market["Market / Technical Analyst\nOHLCV, SMA/EMA, RSI, MACD,\nBollinger, ATR, VWMA & Relative Alpha"]
+        Fund["Fundamentals Analyst\nBrapi (B3 .SA) / SEC EDGAR (US) /\nYahoo Finance / Crypto Tokenomics"]
+        News["News & Macro Analyst\nCompany & World News, FRED Macro\n(CPI, Fed Funds, Yield Curve), Polymarket"]
+        Social["Social & Sentiment Analyst\nStockTwits Cashtags, Reddit Subreddits,\nInsider Sentiment & Transactions"]
     end
 
     subgraph Guard["2. Deterministic Audit Gate"]
-        Audit["🛡️ _audit_tool_results &\nVERIFIED MARKET SNAPSHOT\n(Short-circuits on missing data)"]
+        Audit["_audit_tool_results &\nVERIFIED MARKET SNAPSHOT\n(Short-circuits on missing data)"]
     end
 
     subgraph Research["3. Adversarial Research Debate"]
-        Bull["🐂 Bull Researcher"]
-        Bear["🐻 Bear Researcher"]
-        RManager["⚖️ Research Manager\n(Synthesizes Debate & Investment Plan)"]
+        Bull["Bull Researcher"]
+        Bear["Bear Researcher"]
+        RManager["Research Manager\n(Synthesizes Debate & Investment Plan)"]
     end
 
     subgraph Execution["4. Trading & Risk Committee"]
-        Trader["💼 Trader Agent\n(Actionable Proposal & Sizing)"]
-        Aggressive["🔥 Aggressive Risk Debater"]
-        Conservative["🛡️ Conservative Risk Debater"]
-        Neutral["⚖️ Neutral Risk Debater"]
-        PM["👑 Portfolio Manager\n(Final Verdict: Buy / Overweight /\nHold / Underweight / Sell)"]
+        Trader["Trader Agent\n(Actionable Proposal & Sizing)"]
+        Aggressive["Aggressive Risk Debater"]
+        Conservative["Conservative Risk Debater"]
+        Neutral["Neutral Risk Debater"]
+        PM["Portfolio Manager\n(Final Verdict: Buy / Overweight /\nHold / Underweight / Sell)"]
     end
 
     Input --> Market & Fund & News & Social
@@ -94,7 +94,7 @@ flowchart LR
 
 ---
 
-## 🛡️ Anti-Hallucination & Data Integrity Engineering
+## Anti-Hallucination & Data Integrity Engineering
 
 A core engineering focus of this fork is **eliminating LLM financial hallucinations** when analyzing non-US tickers, illiquid FIIs/ETFs, or missing API fields:
 
@@ -109,7 +109,7 @@ A core engineering focus of this fork is **eliminating LLM financial hallucinati
 
 ---
 
-## ⚡ FastAPI Microservice (`api_server.py`)
+## FastAPI Microservice (`api_server.py`)
 
 In addition to the Python SDK and CLI, this repository exposes a lightweight **FastAPI** server on port `8000` for seamless integration with [**invest-portfolio**](https://github.com/JoseV-001/invest-portfolio):
 
@@ -121,7 +121,7 @@ In addition to the Python SDK and CLI, this repository exposes a lightweight **F
 
 ---
 
-## 🚀 Quick Start & Installation
+## Quick Start & Installation
 
 ### 1. Clone and Set Up Virtual Environment
 ```bash
@@ -171,7 +171,7 @@ curl -X POST http://localhost:8000/api/analyze \
 
 ---
 
-## 📜 License & Citation
+## License & Citation
 
 Licensed under the **Apache License 2.0** (see [`LICENSE`](./LICENSE)).
 
