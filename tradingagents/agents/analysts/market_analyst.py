@@ -11,7 +11,6 @@ from tradingagents.agents.tools import (
     get_verified_market_snapshot,
 )
 
-
 # Ferramentas disponíveis para o analista de mercado.
 TOOLS = (
     get_stock_data,

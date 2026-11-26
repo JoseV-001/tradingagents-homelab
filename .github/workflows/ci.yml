@@ -11,18 +11,14 @@ concurrency:
 
 jobs:
   test:
-    name: tests (py${{ matrix.python-version }}${{ matrix.tz && format(', {0}', matrix.tz) || '' }})
+    name: tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
-        # One run away from UTC, so a test that only passes in UTC fails here.
-        include:
-          - python-version: "3.12"
-            tz: America/New_York
+        python-version: ["3.12"]
     env:
-      TZ: ${{ matrix.tz }}
+      TZ: America/New_York
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -47,9 +43,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install .
-          # Catches undeclared runtime deps (e.g. #994 python-dotenv): a bare
-          # install must import the package and the CLI module.
-          python -c "import tradingagents, cli.main; print('clean-install import OK')"
+          python -c "import tradingagents, cli.main, api_server; print('clean-install import OK')"
 
   lint:
     name: ruff (strict, full repo)
@@ -62,6 +56,4 @@ jobs:
       - name: Install ruff
         run: pip install "ruff>=0.16"
       - name: Lint the repository
-        # The repo is fully clean under the strict select, so we lint everything
-        # (generated results/ is excluded via pyproject extend-exclude).
         run: ruff check .

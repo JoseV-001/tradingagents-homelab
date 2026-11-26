@@ -131,9 +131,7 @@ def _is_empty_alpha_vantage_payload(text: str) -> bool:
         return True
     if "feed" in payload and not payload["feed"]:
         return True
-    if str(payload.get("items", "")).strip() == "0":
-        return True
-    return False
+    return str(payload.get("items", "")).strip() == "0"
 
 
 def _has_substantive_data(block: str, tool_name: str) -> bool:
@@ -155,10 +153,7 @@ def _has_substantive_data(block: str, tool_name: str) -> bool:
     ):
         return False
 
-    if tool_name in ("get_news", "get_global_news") and _is_empty_alpha_vantage_payload(raw):
-        return False
-
-    return True
+    return not (tool_name in ("get_news", "get_global_news") and _is_empty_alpha_vantage_payload(raw))
 
 
 def _summarize_unavailability(block: str) -> str:

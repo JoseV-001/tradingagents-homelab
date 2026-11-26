@@ -12,7 +12,6 @@ from tradingagents.dataflows.symbols import normalize_symbol
 from tradingagents.dataflows.vendors.yahoo.common import price_text
 from tradingagents.dataflows.vendors.yahoo.ohlcv import load_ohlcv
 
-
 DEFAULT_SNAPSHOT_INDICATORS: tuple[str, ...] = (
     "close_10_ema",
     "close_50_sma",

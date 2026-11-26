@@ -5,9 +5,8 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from tradingagents.dataflows import config as config_module
-from tradingagents.dataflows import date_window, router
-from tradingagents.dataflows.errors import NoMarketDataError, VendorUnavailableError
+from tradingagents.dataflows import config as config_module, date_window, router
+from tradingagents.dataflows.errors import NoMarketDataError
 from tradingagents.dataflows.vendors import brapi
 from tradingagents.default_config import build_default_config
 
@@ -20,14 +19,18 @@ class BrapiVendorTests(unittest.TestCase):
         config_module._config = build_default_config()
 
     def test_non_sa_ticker_raises_without_http(self):
-        with mock.patch("tradingagents.dataflows.vendors.brapi.requests.get") as get_mock:
-            with self.assertRaises(NoMarketDataError):
-                brapi.get_fundamentals("NVDA", "2026-11-24")
+        with (
+            mock.patch("tradingagents.dataflows.vendors.brapi.requests.get") as get_mock,
+            self.assertRaises(NoMarketDataError),
+        ):
+            brapi.get_fundamentals("NVDA", "2026-11-24")
         get_mock.assert_not_called()
 
     def test_historical_date_withholds_profile_without_http(self):
-        with mock.patch.object(date_window, "get_current_date", return_value="2026-11-24"), \
-             mock.patch("tradingagents.dataflows.vendors.brapi.requests.get") as get_mock:
+        with (
+            mock.patch.object(date_window, "get_current_date", return_value="2026-11-24"),
+            mock.patch("tradingagents.dataflows.vendors.brapi.requests.get") as get_mock,
+        ):
             out = brapi.get_fundamentals("PETR4.SA", "2025-01-15")
         get_mock.assert_not_called()
         self.assertIn("withheld for this date", out)
@@ -88,9 +91,13 @@ class BrapiVendorTests(unittest.TestCase):
             ]
         }
         fake_resp = mock.Mock(status_code=200, content=b"{}", json=lambda: payload)
-        with mock.patch.object(date_window, "get_current_date", return_value="2026-11-24"), \
-             mock.patch("tradingagents.dataflows.vendors.brapi.requests.get", return_value=fake_resp) as get_mock, \
-             mock.patch("tradingagents.dataflows.vendors.brapi._throttle"):
+        with (
+            mock.patch.object(date_window, "get_current_date", return_value="2026-11-24"),
+            mock.patch(
+                "tradingagents.dataflows.vendors.brapi.requests.get", return_value=fake_resp
+            ) as get_mock,
+            mock.patch("tradingagents.dataflows.vendors.brapi._throttle"),
+        ):
             out = brapi.get_fundamentals("PETR4.SA", "2026-11-24")
 
         called_url = get_mock.call_args.args[0]
@@ -122,9 +129,13 @@ class BrapiVendorTests(unittest.TestCase):
             ]
         }
         fake_resp = mock.Mock(status_code=200, content=b"{}", json=lambda: payload)
-        with mock.patch.object(date_window, "get_current_date", return_value="2026-11-24"), \
-             mock.patch("tradingagents.dataflows.vendors.brapi.requests.get", return_value=fake_resp), \
-             mock.patch("tradingagents.dataflows.vendors.brapi._throttle"):
+        with (
+            mock.patch.object(date_window, "get_current_date", return_value="2026-11-24"),
+            mock.patch(
+                "tradingagents.dataflows.vendors.brapi.requests.get", return_value=fake_resp
+            ),
+            mock.patch("tradingagents.dataflows.vendors.brapi._throttle"),
+        ):
             out = brapi.get_fundamentals("ITSA4.SA", "2026-11-24")
 
         self.assertIn("P/L (Price to Earnings): 7.65", out)
@@ -142,13 +153,15 @@ class BrapiVendorTests(unittest.TestCase):
             content=b'{"error":true,"message":"MISSING_TOKEN"}',
             json=lambda: {"error": True, "message": "MISSING_TOKEN"},
         )
-        with mock.patch.object(date_window, "get_current_date", return_value="2026-11-24"), \
-             mock.patch("tradingagents.dataflows.vendors.brapi.requests.get", return_value=fake_401), \
-             mock.patch("tradingagents.dataflows.vendors.brapi._throttle"), \
-             mock.patch.dict(
-                 router.VENDOR_METHODS["get_fundamentals"],
-                 {"yfinance": lambda t, d=None: f"# Company Fundamentals for {t}\nFallback OK"},
-             ):
+        with (
+            mock.patch.object(date_window, "get_current_date", return_value="2026-11-24"),
+            mock.patch("tradingagents.dataflows.vendors.brapi.requests.get", return_value=fake_401),
+            mock.patch("tradingagents.dataflows.vendors.brapi._throttle"),
+            mock.patch.dict(
+                router.VENDOR_METHODS["get_fundamentals"],
+                {"yfinance": lambda t, d=None: f"# Company Fundamentals for {t}\nFallback OK"},
+            ),
+        ):
             out = router.route_to_vendor("get_fundamentals", "ITSA4.SA", "2026-11-24")
         self.assertIn("Fallback OK", out)
 

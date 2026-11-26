@@ -6,7 +6,7 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 import requests
@@ -16,7 +16,6 @@ from tradingagents.dataflows.errors import (
     NoMarketDataError,
     VendorUnavailableError,
 )
-from tradingagents.dataflows.net import get_scrubbed
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,9 @@ def _throttle() -> None:
     """Space concurrent Brapi requests across parallel analyst threads."""
     global _last_request_ts
     try:
-        min_interval_ms = max(0, int(os.getenv("BRAPI_MIN_INTERVAL_MS", str(_DEFAULT_MIN_INTERVAL_MS))))
+        min_interval_ms = max(
+            0, int(os.getenv("BRAPI_MIN_INTERVAL_MS", str(_DEFAULT_MIN_INTERVAL_MS)))
+        )
     except ValueError:
         min_interval_ms = _DEFAULT_MIN_INTERVAL_MS
     min_interval_s = min_interval_ms / 1000.0
@@ -64,7 +65,9 @@ def _get_brapi_token() -> str:
     return (os.getenv("BRAPI_TOKEN") or os.getenv("BRAPI_API_KEY") or "").strip()
 
 
-def _fetch_brapi_json(url: str, params: dict[str, str], canonical: str) -> tuple[int, dict[str, Any]]:
+def _fetch_brapi_json(
+    url: str, params: dict[str, str], canonical: str
+) -> tuple[int, dict[str, Any]]:
     _throttle()
     token = _get_brapi_token()
     headers = {"User-Agent": "TradingAgents/1.0"}
@@ -235,27 +238,40 @@ def get_fundamentals(
     market_time = r.get("regularMarketTime") or "Insufficient Data"
     high_52w = _fmt_money(r.get("fiftyTwoWeekHigh"), currency)
     low_52w = _fmt_money(r.get("fiftyTwoWeekLow"), currency)
-    market_cap = _fmt_money(r.get("marketCap") if r.get("marketCap") is not None else stats.get("marketCap"), currency)
+    market_cap = _fmt_money(
+        r.get("marketCap") if r.get("marketCap") is not None else stats.get("marketCap"), currency
+    )
 
-    pe_ratio = _fmt_num(r.get("priceEarnings") if r.get("priceEarnings") is not None else stats.get("trailingPE"))
+    pe_ratio = _fmt_num(
+        r.get("priceEarnings") if r.get("priceEarnings") is not None else stats.get("trailingPE")
+    )
     pb_ratio = _fmt_num(stats.get("priceToBook"))
     roe = _fmt_ratio_and_pct(fin.get("returnOnEquity"))
     div_yield = _fmt_dividend_yield(stats, r)
-    lpa = _fmt_money(r.get("earningsPerShare") if r.get("earningsPerShare") is not None else stats.get("trailingEps"), currency)
+    lpa = _fmt_money(
+        r.get("earningsPerShare")
+        if r.get("earningsPerShare") is not None
+        else stats.get("trailingEps"),
+        currency,
+    )
     vpa = _fmt_money(stats.get("bookValue"), currency)
     net_margin = _fmt_ratio_and_pct(
-        fin.get("profitMargins") if fin.get("profitMargins") is not None else stats.get("profitMargins")
+        fin.get("profitMargins")
+        if fin.get("profitMargins") is not None
+        else stats.get("profitMargins")
     )
 
     core_values = [pe_ratio, pb_ratio, roe, div_yield, lpa, vpa, net_margin, change_pct]
     if all(v == "Insufficient Data" for v in core_values) and price == "Insufficient Data":
-        raise NoMarketDataError(ticker, canonical, "all Brapi fundamental and quote fields are null")
+        raise NoMarketDataError(
+            ticker, canonical, "all Brapi fundamental and quote fields are null"
+        )
 
     lines = [
         f"# Company Fundamentals for {canonical} (Brapi)",
         f"Source: Brapi ({url})",
         f"Ticker B3 Consulted: {b3_symbol}",
-        f"Snapshot Timestamp (UTC): {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}",
+        f"Snapshot Timestamp (UTC): {datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')}",
         f"Company Name: {company_name}",
         f"Sector: {sector}",
         f"Industry: {industry}",

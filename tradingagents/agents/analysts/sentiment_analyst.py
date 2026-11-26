@@ -88,13 +88,13 @@ def _has_substantive_data(block: str, source: str) -> bool:
     if any(marker in text for marker in _NO_DATA_MARKERS[source]):
         return False
 
-    if text.startswith("<") and any(
-        marker in text[:300]
-        for marker in ("unavailable", "no posts", "no messages", "fetch failed")
-    ):
-        return False
-
-    return True
+    return not (
+        text.startswith("<")
+        and any(
+            marker in text[:300]
+            for marker in ("unavailable", "no posts", "no messages", "fetch failed")
+        )
+    )
 
 
 def create_sentiment_analyst(llm):

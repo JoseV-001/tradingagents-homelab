@@ -132,12 +132,9 @@ def _is_empty_alpha_vantage_payload(text: str) -> bool:
         )
         if not has_records:
             return True
-    if "annualReports" in payload and "quarterlyReports" in payload:
-        if not payload["annualReports"] and not payload["quarterlyReports"]:
-            return True
-    if "data" in payload and payload["data"] == []:
+    if "annualReports" in payload and "quarterlyReports" in payload and not payload["annualReports"] and not payload["quarterlyReports"]:
         return True
-    return False
+    return bool("data" in payload and payload["data"] == [])
 
 
 def _detect_vendor_label(text: str) -> str:
@@ -168,10 +165,7 @@ def _has_substantive_data(block: str, tool_name: str) -> bool:
     if any(marker in lowered for marker in _NO_DATA_MARKERS[tool_name]):
         return False
 
-    if _is_empty_alpha_vantage_payload(raw):
-        return False
-
-    return True
+    return not _is_empty_alpha_vantage_payload(raw)
 
 
 def _summarize_unavailability(block: str) -> str:
@@ -331,7 +325,7 @@ def _build_insufficient_data_report(
         "Conforme protocolo anti-alucinação, nenhum número financeiro, múltiplo, histórico de dividendos "
         "ou perfil societário foi extraído da memória geral do modelo.",
         "",
-        f"### 1. Visão Geral e Múltiplos (`get_fundamentals`)",
+        "### 1. Visão Geral e Múltiplos (`get_fundamentals`)",
         f"- **Status:** `{FundamentalsCoverageBand.INSUFFICIENT_DATA.value}` (`DATA_UNAVAILABLE`).",
         f"- **Detalhe observado:** {f_reason}",
         "",
@@ -501,7 +495,9 @@ def create_fundamentals_analyst(llm):
                     audit=audit,
                 )
                 result = AIMessage(content=report)
-            elif report and band != FundamentalsCoverageBand.SUFFICIENT_DATA:
+            elif report and band != FundamentalsCoverageBand.SUFFICIENT_DATA and any(
+                audit[k]["called"] and not audit[k]["has_data"] for k in _CORE_FINANCIAL_TOOLS
+            ):
                 report = _ensure_partial_header(ticker, report, band)
                 result = AIMessage(content=report)
 

@@ -148,11 +148,15 @@ async def chat(request: ChatRequest):
         ai_message = await run_in_threadpool(llm.invoke, messages)
         reply = getattr(ai_message, "content", str(ai_message))
         if isinstance(reply, list):
-            reply = "\n".join(str(item.get("text", item) if isinstance(item, dict) else item) for item in reply)
+            reply = "\n".join(
+                str(item.get("text", item) if isinstance(item, dict) else item) for item in reply
+            )
         return ChatResponse(reply=str(reply).strip(), model=model_name)
     except Exception as exc:
         logger.exception("Chat completion failed")
-        raise HTTPException(status_code=502, detail=f"Erro ao consultar modelo Gemini: {type(exc).__name__}: {exc}")
+        raise HTTPException(
+            status_code=502, detail=f"Erro ao consultar modelo Gemini: {type(exc).__name__}: {exc}"
+        ) from exc
 
 
 def _run_multi_agent_analysis(
@@ -210,13 +214,26 @@ async def analyze(request: AnalyzeRequest):
 
     trade_date = (request.date or date.today().strftime("%Y-%m-%d")).strip()
     valid_analysts = {"market", "social", "news", "fundamentals"}
-    default_analysts = ["market", "news", "fundamentals"] if request.fast else ["market", "social", "news", "fundamentals"]
-    selected = [a.strip().lower() for a in (request.analysts or default_analysts) if a.strip().lower() in valid_analysts]
+    default_analysts = (
+        ["market", "news", "fundamentals"]
+        if request.fast
+        else ["market", "social", "news", "fundamentals"]
+    )
+    selected = [
+        a.strip().lower()
+        for a in (request.analysts or default_analysts)
+        if a.strip().lower() in valid_analysts
+    ]
     if not selected:
         selected = default_analysts
 
     try:
-        return await run_in_threadpool(_run_multi_agent_analysis, ticker, trade_date, selected, request.fast)
+        return await run_in_threadpool(
+            _run_multi_agent_analysis, ticker, trade_date, selected, request.fast
+        )
     except Exception as exc:
         logger.exception("Multi-agent analysis failed for %s", ticker)
-        raise HTTPException(status_code=502, detail=f"Erro na análise multi-agente de {ticker}: {type(exc).__name__}: {exc}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Erro na análise multi-agente de {ticker}: {type(exc).__name__}: {exc}",
+        ) from exc

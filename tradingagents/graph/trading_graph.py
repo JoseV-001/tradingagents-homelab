@@ -166,8 +166,8 @@ class TradingAgentsGraph:
             # another has pending nodes this graph no longer has, and one saved
             # before the Memory Log step would resume without the lessons.
             "analysts=parallel",
-            f"analyst_only={self.analyst_only}",
-            f"memory={'off' if self.analyst_only else 'parallel'}",
+            f"analyst_only={getattr(self, 'analyst_only', False)}",
+            f"memory={'off' if getattr(self, 'analyst_only', False) else 'parallel'}",
             f"settings={digest}",
         ])
 
